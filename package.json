@@ -1,0 +1,39 @@
+{
+  "name": "lune-simfoni",
+  "version": "1.0.0",
+  "description": "This tool estimates the emission of a search term and category from a CSV and outputs a new CSV",
+  "main": "index.js",
+  "repository": "https://github.com/lune-climate/lune-simfoni",
+  "author": "Lune",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "prettier": "prettier --check \"src/**/*.ts\"",
+    "eslint": "eslint \"src/**/*.ts\"",
+    "lint": "yarn eslint && yarn prettier",
+    "fix": "eslint --fix \"src/**/*.ts\" && prettier --write \"src/**/*.ts\"",
+    "build": "tsc --build --incremental tsconfig.json && ( test -e node_modules/src || ln -s ../dist/src node_modules/src )",
+    "tool": "node dist/src/index.js"
+  },
+  "devDependencies": {
+    "@lune-climate/eslint-config": "git+https://github.com/lune-climate/eslint-config.git#master",
+    "@types/lodash": "^4.14.202",
+    "@types/node": "^20.11.19",
+    "@typescript-eslint/eslint-plugin": "^7.0.1",
+    "@typescript-eslint/parser": "^7.0.1",
+    "eslint": "^8.56.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-n": "^16.6.2",
+    "eslint-plugin-promise": "^6.1.1",
+    "eslint-plugin-simple-import-sort": "^12.0.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@lune-climate/lune": "^3.2.3",
+    "commander": "^12.0.0",
+    "csv-parse": "^5.5.3",
+    "csv-stringify": "^6.4.5",
+    "ts-results-es": "^4.1.0-alpha.1"
+  }
+}
