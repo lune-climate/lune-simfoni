@@ -30,7 +30,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@lune-climate/lune": "^3.2.3",
+    "@lune-climate/lune": "^3.2.4",
     "commander": "^12.0.0",
     "csv-parse": "^5.5.3",
     "csv-stringify": "^6.4.5",

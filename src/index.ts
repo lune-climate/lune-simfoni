@@ -49,11 +49,16 @@ async function calculateEmissions(
     },
 ): Promise<
     Result<
-        { emissionsTCo2: string; emissionFactorName: string; emissionFactorSource: string },
+        {
+            emissionsTCo2: string
+            emissionFactorName: string
+            emissionFactorSource: string
+            score: string
+        },
         string
     >
 > {
-    const result = await luneClient.createTransactionEstimate({
+    const request = {
         value: {
             value: amount,
             currency,
@@ -63,16 +68,26 @@ async function calculateEmissions(
             countryCode,
             ...(category ? { category } : {}),
         },
-    })
-
+    }
+    const result = await luneClient.createTransactionEstimate(request)
     if (result.isErr()) {
         return Err(result.error.description)
+    }
+
+    if (!('mass' in result.value)) {
+        return Ok({
+            emissionsTCo2: '',
+            emissionFactorName: '',
+            emissionFactorSource: '',
+            score: '',
+        })
     }
 
     return Ok({
         emissionsTCo2: result.value.mass.amount,
         emissionFactorName: result.value.emissionFactor!.name,
         emissionFactorSource: result.value.emissionFactor!.source,
+        score: `${result.value.searchTermMatchScore!}`,
     })
 }
 
@@ -125,7 +140,7 @@ async function main(): Promise<void> {
     for (const row of source.value) {
         const searchTerm = row[searchTermColumn].trim()
         const category = categoryColumn ? row[categoryColumn].trim() : undefined
-        const amount = row[monetaryAmountColumn].trim()
+        const amount = row[monetaryAmountColumn].trim().replace(/,/g, '')
         const currency = row[currencyColumn].trim()
         const countryCode = row[countryCodeColumn].trim()
 
@@ -141,13 +156,14 @@ async function main(): Promise<void> {
             process.exit(1)
         }
 
-        const { emissionsTCo2, emissionFactorName, emissionFactorSource } = result.value
+        const { emissionsTCo2, emissionFactorName, emissionFactorSource, score } = result.value
 
         out.push({
             ...row,
             'Emissions (tCO2e)': emissionsTCo2,
             'Emission factor name': emissionFactorName,
             'Emission factor source': emissionFactorSource,
+            'Confidence score': score,
         })
     }
 

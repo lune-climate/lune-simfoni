@@ -60,10 +60,10 @@
     eslint-config-prettier "^9.0.0"
     eslint-config-standard "^17.1.0"
 
-"@lune-climate/lune@^3.2.3":
-  version "3.2.3"
-  resolved "https://registry.yarnpkg.com/@lune-climate/lune/-/lune-3.2.3.tgz#da10134d80a3dfa023e6ed1ef8e881316556c23f"
-  integrity sha512-F9Z2d5jtB4qMHWDMdjBxezEBzzSTyIJSJub7HugYKT3TU4AK1G07DDzCzvDFIy3xx8cOpcKjwyOLMgA8VPZ14Q==
+"@lune-climate/lune@^3.2.4":
+  version "3.2.4"
+  resolved "https://registry.yarnpkg.com/@lune-climate/lune/-/lune-3.2.4.tgz#bcdac8323a51830e826887de0acd34d45494ca2b"
+  integrity sha512-3elS+VEZz07ktkvSnmfdAK06R4IvZekh+MTP4bpbBhdOLI5FxYOmNi3Nr/ILnUIuQO33juyMazIqWLVGianWxA==
   dependencies:
     axios "^1.4.0"
     camelcase-keys "<8.0.0"
