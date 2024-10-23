@@ -32,6 +32,10 @@ program
     )
     .argument('<csv-file>', 'The source CSV file')
 
+function dashboardUrl(estimateId: string): string {
+    return `https://dashboard.lune.co/calculate-emissions/everyday-purchases/${estimateId}/results`
+}
+
 async function calculateEmissions(
     luneClient: LuneClient,
     {
@@ -54,6 +58,7 @@ async function calculateEmissions(
             emissionFactorName: string
             emissionFactorSource: string
             score: string
+            dashboardUrl: string
         },
         string
     >
@@ -80,6 +85,7 @@ async function calculateEmissions(
             emissionFactorName: '',
             emissionFactorSource: '',
             score: '',
+            dashboardUrl: '',
         })
     }
 
@@ -88,6 +94,7 @@ async function calculateEmissions(
         emissionFactorName: result.value.emissionFactor!.name,
         emissionFactorSource: result.value.emissionFactor!.source,
         score: `${result.value.searchTermMatchScore!}`,
+        dashboardUrl: dashboardUrl(result.value.id),
     })
 }
 
@@ -159,12 +166,14 @@ async function main(): Promise<void> {
                 'Emission factor name': '',
                 'Emission factor source': '',
                 'Confidence score': '',
+                'Dashboard URL': '',
                 Error: result.error,
             })
             continue
         }
 
-        const { emissionsTCo2, emissionFactorName, emissionFactorSource, score } = result.unwrap()
+        const { emissionsTCo2, emissionFactorName, emissionFactorSource, score, dashboardUrl } =
+            result.unwrap()
 
         out.push({
             ...row,
@@ -172,6 +181,7 @@ async function main(): Promise<void> {
             'Emission factor name': emissionFactorName,
             'Emission factor source': emissionFactorSource,
             'Confidence score': score,
+            'Dashboard URL': dashboardUrl,
             Error: '',
         })
     }
