@@ -153,10 +153,18 @@ async function main(): Promise<void> {
         })
         if (result.isErr()) {
             console.error(`Error: ${result.error}`)
-            process.exit(1)
+            out.push({
+                ...row,
+                'Emissions (tCO2e)': '',
+                'Emission factor name': '',
+                'Emission factor source': '',
+                'Confidence score': '',
+                Error: result.error,
+            })
+            continue
         }
 
-        const { emissionsTCo2, emissionFactorName, emissionFactorSource, score } = result.value
+        const { emissionsTCo2, emissionFactorName, emissionFactorSource, score } = result.unwrap()
 
         out.push({
             ...row,
@@ -164,6 +172,7 @@ async function main(): Promise<void> {
             'Emission factor name': emissionFactorName,
             'Emission factor source': emissionFactorSource,
             'Confidence score': score,
+            Error: '',
         })
     }
 
