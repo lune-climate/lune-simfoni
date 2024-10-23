@@ -57,7 +57,7 @@ async function calculateEmissions(
             emissionsTCo2: string
             emissionFactorName: string
             emissionFactorSource: string
-            score: string
+            score: number | undefined
             dashboardUrl: string
         },
         string
@@ -84,7 +84,7 @@ async function calculateEmissions(
             emissionsTCo2: '',
             emissionFactorName: '',
             emissionFactorSource: '',
-            score: '',
+            score: undefined,
             dashboardUrl: '',
         })
     }
@@ -93,7 +93,7 @@ async function calculateEmissions(
         emissionsTCo2: result.value.mass.amount,
         emissionFactorName: result.value.emissionFactor!.name,
         emissionFactorSource: result.value.emissionFactor!.source,
-        score: `${result.value.searchTermMatchScore!}`,
+        score: result.value.searchTermMatchScore,
         dashboardUrl: dashboardUrl(result.value.id),
     })
 }
@@ -180,7 +180,7 @@ async function main(): Promise<void> {
             'Emissions (tCO2e)': emissionsTCo2,
             'Emission factor name': emissionFactorName,
             'Emission factor source': emissionFactorSource,
-            'Confidence score': score,
+            'Confidence score': score ? `${score}` : '',
             'Dashboard URL': dashboardUrl,
             Error: '',
         })
