@@ -11,12 +11,12 @@ program
     .name('lune-simfoni-csv-tool')
     .option('-o, --output <output-csv-file>', 'The destination CSV file containing the results')
     .option(
-        '-s, --search-term-column <search-term-column>',
-        `The name of the column containing mapping to the API's 'search_term'`,
+        '-s, --search-term-columns <search-term-columns>',
+        `Comma separated names of the columns containing mapping to the API's 'search_term'`,
     )
     .option(
-        '-ca, --category-column [category-column]',
-        `The name of the column containing mapping to the API's 'category'`,
+        '-ca, --category-columns [category-columns]',
+        `Comma separated names of the columns containing mapping to the API's 'category'`,
     )
     .option(
         '-m, --monetary-amount-column <monetary-amount-column>',
@@ -98,6 +98,23 @@ async function calculateEmissions(
     })
 }
 
+/**
+ * Generate all possible permutations of search terms and categories prioritising search terms
+ */
+function searchCategoryPermutations(
+    searchTerms: string[],
+    categories: (string | undefined)[],
+): { searchTerm: string; category: string | undefined }[] {
+    const result = []
+    for (const searchTerm of searchTerms) {
+        for (const category of categories) {
+            result.push({ searchTerm, category })
+        }
+    }
+    return result
+}
+
+// eslint-disable-next-line complexity
 async function main(): Promise<void> {
     program.parse(process.argv)
     if (program.args.length < 1) {
@@ -113,15 +130,15 @@ async function main(): Promise<void> {
     const luneClient = new LuneClient(apiKey)
     const output = program.opts().output
     const {
-        searchTermColumn,
-        categoryColumn,
+        searchTermColumns,
+        categoryColumns,
         monetaryAmountColumn,
         currencyColumn,
         countryCodeColumn,
     } = program.opts()
-    if (!searchTermColumn || !monetaryAmountColumn || !currencyColumn || !countryCodeColumn) {
+    if (!searchTermColumns || !monetaryAmountColumn || !currencyColumn || !countryCodeColumn) {
         console.error(
-            'All of search-term-column, monetary-amount-column, currency-column and country-code-column are required',
+            'All of search-term-columns, monetary-amount-column, currency-column and country-code-column are required',
         )
         process.exit(1)
     }
@@ -131,13 +148,22 @@ async function main(): Promise<void> {
     )
 
     const filename = program.args[0]
-    const source = await loadCsvUtils(filename, [
-        searchTermColumn,
+
+    const searchTermColumnsArr: readonly string[] = searchTermColumns
+        .split(',')
+        .map((column: string) => column.trim())
+    const categoryColumnsArr: readonly string[] = categoryColumns
+        ? categoryColumns.split(',').map((column: string) => column.trim())
+        : []
+
+    const columns = [
+        ...searchTermColumnsArr,
         monetaryAmountColumn,
         currencyColumn,
         countryCodeColumn,
-        ...(categoryColumn ? [categoryColumn] : []),
-    ])
+        ...categoryColumnsArr,
+    ]
+    const source = await loadCsvUtils(filename, columns)
     if (source.isErr()) {
         console.error(source.error)
         process.exit(1)
@@ -145,45 +171,61 @@ async function main(): Promise<void> {
 
     const out: any[] = []
     for (const row of source.value) {
-        const searchTerm = row[searchTermColumn].trim()
-        const category = categoryColumn ? row[categoryColumn].trim() : undefined
+        const searchTerms = searchTermColumnsArr.map((column: string) => row[column].trim())
+        const categories = categoryColumnsArr.length
+            ? categoryColumnsArr.map((column: string) => row[column].trim())
+            : [undefined]
         const amount = row[monetaryAmountColumn].trim().replace(/,/g, '')
         const currency = row[currencyColumn].trim()
         const countryCode = row[countryCodeColumn].trim()
 
-        const result = await calculateEmissions(luneClient, {
-            searchTerm,
-            category,
-            amount,
-            currency,
-            countryCode,
-        })
-        if (result.isErr()) {
-            console.error(`Error: ${result.error}`)
+        const searchPermutations = searchCategoryPermutations(searchTerms, categories)
+
+        for (let i = 0; i < searchPermutations.length; i++) {
+            const { searchTerm, category } = searchPermutations[i]
+
+            const result = await calculateEmissions(luneClient, {
+                searchTerm,
+                category,
+                amount,
+                currency,
+                countryCode,
+            })
+            if (result.isErr()) {
+                console.error(`Error: ${result.error}`)
+                out.push({
+                    ...row,
+                    'Emissions (tCO2e)': '',
+                    'Emission factor name': '',
+                    'Emission factor source': '',
+                    'Confidence score': '',
+                    'Dashboard URL': '',
+                    'Search term used': '',
+                    'Category used': '',
+                    Error: result.error,
+                })
+                if (i === searchPermutations.length - 1) {
+                    break
+                } else {
+                    continue
+                }
+            }
+
+            const { emissionsTCo2, emissionFactorName, emissionFactorSource, score, dashboardUrl } =
+                result.unwrap()
+
             out.push({
                 ...row,
-                'Emissions (tCO2e)': '',
-                'Emission factor name': '',
-                'Emission factor source': '',
-                'Confidence score': '',
-                'Dashboard URL': '',
-                Error: result.error,
+                'Emissions (tCO2e)': emissionsTCo2,
+                'Emission factor name': emissionFactorName,
+                'Emission factor source': emissionFactorSource,
+                'Confidence score': score ? `${score}` : '',
+                'Dashboard URL': dashboardUrl,
+                'Search term used': searchTerm,
+                'Category used': category || '',
+                Error: '',
             })
-            continue
         }
-
-        const { emissionsTCo2, emissionFactorName, emissionFactorSource, score, dashboardUrl } =
-            result.unwrap()
-
-        out.push({
-            ...row,
-            'Emissions (tCO2e)': emissionsTCo2,
-            'Emission factor name': emissionFactorName,
-            'Emission factor source': emissionFactorSource,
-            'Confidence score': score ? `${score}` : '',
-            'Dashboard URL': dashboardUrl,
-            Error: '',
-        })
     }
 
     const csvText = stringify(out, { header: true, quoted: true })

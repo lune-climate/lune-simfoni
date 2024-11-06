@@ -24,4 +24,9 @@ then:
     API_KEY=$API_KEY yarn tool -s 'Category Level 3' -ca 'Category Level 2' -m 'Sum of Spend' -cu Currency -c Country -o output.csv template.csv
     ```
 
+    The script now accepts a comma separated list of search terms and category and calculates emissions for all permutations:
+    ```
+    yarn tool -s 'Category Level 3, Category Level 2' -ca 'Category Level 2, Category Level 1' -m 'Sum of Spend' -cu Currency -c Country -o output.csv template.csv
+    ```
+
 * For usage: `yarn tool --help`
