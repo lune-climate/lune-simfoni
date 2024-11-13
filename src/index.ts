@@ -181,6 +181,16 @@ async function main(): Promise<void> {
 
         const searchPermutations = searchCategoryPermutations(searchTerms, categories)
 
+        const permutationsResults: {
+            name: string
+            emissions: string
+            source: string
+            url: string
+            searchTermUsed: string
+            categoryUsed: string
+            score: number | null | undefined
+        }[] = []
+
         for (let i = 0; i < searchPermutations.length; i++) {
             const { searchTerm, category } = searchPermutations[i]
 
@@ -193,16 +203,14 @@ async function main(): Promise<void> {
             })
             if (result.isErr()) {
                 console.error(`Error: ${result.error}`)
-                out.push({
-                    ...row,
-                    'Emissions (tCO2e)': '',
-                    'Emission factor name': '',
-                    'Emission factor source': '',
-                    'Confidence score': '',
-                    'Dashboard URL': '',
-                    'Search term used': '',
-                    'Category used': '',
-                    Error: result.error,
+                permutationsResults.push({
+                    name: `Error: ${result.error}`,
+                    emissions: '',
+                    source: '',
+                    url: '',
+                    searchTermUsed: '',
+                    categoryUsed: '',
+                    score: null,
                 })
                 if (i === searchPermutations.length - 1) {
                     break
@@ -214,18 +222,52 @@ async function main(): Promise<void> {
             const { emissionsTCo2, emissionFactorName, emissionFactorSource, score, dashboardUrl } =
                 result.unwrap()
 
-            out.push({
-                ...row,
-                'Emissions (tCO2e)': emissionsTCo2,
-                'Emission factor name': emissionFactorName,
-                'Emission factor source': emissionFactorSource,
-                'Confidence score': score ? `${score}` : '',
-                'Dashboard URL': dashboardUrl,
-                'Search term used': searchTerm,
-                'Category used': category || '',
-                Error: '',
+            permutationsResults.push({
+                name: emissionFactorName,
+                emissions: emissionsTCo2,
+                source: emissionFactorSource,
+                url: dashboardUrl,
+                searchTermUsed: searchTerm,
+                categoryUsed: category || '',
+                score,
             })
         }
+
+        const noConfidenceResults = permutationsResults.filter(
+            ({ score }) => score === null || score === undefined,
+        )
+        const withConfidenceResults = permutationsResults.filter(
+            ({ score }) => score !== null && score !== undefined,
+        )
+        const sortedPermutationResults = [
+            ...[...withConfidenceResults].sort((a, b) => {
+                return a.score! - b.score!
+            }),
+            ...noConfidenceResults,
+        ]
+
+        const resultObj: Record<string, string> = sortedPermutationResults.reduce(
+            (acc, result, i) => {
+                const idx = i + 1
+                const { name, emissions, source, url, searchTermUsed, categoryUsed, score } = result
+                return {
+                    ...acc,
+                    [`Emissions (tCO2e) (${idx})`]: emissions,
+                    [`Emission factor name (${idx})`]: name,
+                    [`Emission factor source (${idx})`]: source,
+                    [`Confidence score (${idx})`]: score ? `${score}` : ``,
+                    [`Dashboard URL (${idx})`]: url,
+                    [`Search term used (${idx})`]: searchTermUsed,
+                    [`Category used (${idx})`]: categoryUsed || ``,
+                }
+            },
+            {},
+        )
+
+        out.push({
+            ...row,
+            ...resultObj,
+        })
     }
 
     const csvText = stringify(out, { header: true, quoted: true })
