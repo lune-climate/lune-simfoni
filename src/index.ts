@@ -191,47 +191,55 @@ async function main(): Promise<void> {
             score: number | null | undefined
         }[] = []
 
+        const promises = []
         for (let i = 0; i < searchPermutations.length; i++) {
-            const { searchTerm, category } = searchPermutations[i]
+            // eslint-disable-next-line no-inner-declarations, func-style
+            const fn = async () => {
+                const { searchTerm, category } = searchPermutations[i]
 
-            const result = await calculateEmissions(luneClient, {
-                searchTerm,
-                category,
-                amount,
-                currency,
-                countryCode,
-            })
-            if (result.isErr()) {
-                console.error(`Error: ${result.error}`)
-                permutationsResults.push({
-                    name: `Error: ${result.error}`,
-                    emissions: '',
-                    source: '',
-                    url: '',
-                    searchTermUsed: '',
-                    categoryUsed: '',
-                    score: null,
+                const result = await calculateEmissions(luneClient, {
+                    searchTerm,
+                    category,
+                    amount,
+                    currency,
+                    countryCode,
                 })
-                if (i === searchPermutations.length - 1) {
-                    break
-                } else {
-                    continue
+                if (result.isErr()) {
+                    console.error(`Error: ${result.error}`)
+                    permutationsResults.push({
+                        name: `Error: ${result.error}`,
+                        emissions: '',
+                        source: '',
+                        url: '',
+                        searchTermUsed: '',
+                        categoryUsed: '',
+                        score: null,
+                    })
+                    return
                 }
+
+                const {
+                    emissionsTCo2,
+                    emissionFactorName,
+                    emissionFactorSource,
+                    score,
+                    dashboardUrl,
+                } = result.unwrap()
+
+                permutationsResults.push({
+                    name: emissionFactorName,
+                    emissions: emissionsTCo2,
+                    source: emissionFactorSource,
+                    url: dashboardUrl,
+                    searchTermUsed: searchTerm,
+                    categoryUsed: category || '',
+                    score,
+                })
             }
-
-            const { emissionsTCo2, emissionFactorName, emissionFactorSource, score, dashboardUrl } =
-                result.unwrap()
-
-            permutationsResults.push({
-                name: emissionFactorName,
-                emissions: emissionsTCo2,
-                source: emissionFactorSource,
-                url: dashboardUrl,
-                searchTermUsed: searchTerm,
-                categoryUsed: category || '',
-                score,
-            })
+            promises.push(fn())
         }
+
+        await Promise.all(promises)
 
         const noConfidenceResults = permutationsResults.filter(
             ({ score }) => score === null || score === undefined,
