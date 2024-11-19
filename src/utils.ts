@@ -40,7 +40,7 @@ async function readFileChecked(path: string): Promise<Result<Buffer, string>> {
  */
 export function parseCsvChecked(buffer: Buffer): Result<object[], string> {
     try {
-        return Ok(parseCsv(buffer, { columns: true }))
+        return Ok(parseCsv(buffer, { columns: true, bom: true }))
     } catch (e) {
         return Err(`Failed to parse CSV content: ${e}`)
     }
