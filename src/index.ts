@@ -1,6 +1,7 @@
 import { writeFile } from 'fs/promises'
 
 import { LuneClient, MonetaryAmount } from '@lune-climate/lune'
+import Big from 'big.js'
 import { program } from 'commander'
 import { stringify } from 'csv-stringify/sync'
 import { Err, Ok, Result } from 'ts-results-es'
@@ -57,6 +58,11 @@ async function calculateEmissions(
             emissionsTCo2: string
             emissionFactorName: string
             emissionFactorSource: string
+            emissionFactorIntensity: string
+            emissionFactorNumeratorUnit: string
+            emissionFactorDenominatorUnit: string
+            requestedCurrency: string
+            exchangeRate: string
             score: number | undefined
             dashboardUrl: string
         },
@@ -84,15 +90,29 @@ async function calculateEmissions(
             emissionsTCo2: '',
             emissionFactorName: '',
             emissionFactorSource: '',
+            emissionFactorIntensity: '',
+            emissionFactorNumeratorUnit: '',
+            emissionFactorDenominatorUnit: '',
+            requestedCurrency: currency,
+            exchangeRate: '',
             score: undefined,
             dashboardUrl: '',
         })
     }
 
+    const exchangeRate = Big(result.value.exchangeRate ?? 1)
+    const emissionFactor = result.value.emissionFactor!
+    const emissionFactorIntensity = Big(emissionFactor.gasEmissions!.co2E).mul(exchangeRate)
+
     return Ok({
         emissionsTCo2: result.value.mass.amount,
         emissionFactorName: result.value.emissionFactor!.name,
         emissionFactorSource: result.value.emissionFactor!.source,
+        emissionFactorIntensity: emissionFactorIntensity.toString(),
+        emissionFactorNumeratorUnit: emissionFactor.numeratorUnit,
+        emissionFactorDenominatorUnit: emissionFactor.denominatorUnit,
+        requestedCurrency: currency,
+        exchangeRate: exchangeRate.toString(),
         score: result.value.searchTermMatchScore,
         dashboardUrl: dashboardUrl(result.value.id),
     })
@@ -189,6 +209,11 @@ async function main(): Promise<void> {
             searchTermUsed: string
             categoryUsed: string
             score: number | null | undefined
+            exchangeRate: string
+            emissionFactorNumeratorUnit: string
+            emissionFactorDenominatorUnit: string
+            emissionFactorIntensity: string
+            requestedCurrency: string
         }[] = []
 
         const promises = []
@@ -214,6 +239,11 @@ async function main(): Promise<void> {
                         searchTermUsed: '',
                         categoryUsed: '',
                         score: null,
+                        emissionFactorNumeratorUnit: '',
+                        emissionFactorDenominatorUnit: '',
+                        emissionFactorIntensity: '',
+                        exchangeRate: '',
+                        requestedCurrency: '',
                     })
                     return
                 }
@@ -224,6 +254,11 @@ async function main(): Promise<void> {
                     emissionFactorSource,
                     score,
                     dashboardUrl,
+                    emissionFactorNumeratorUnit,
+                    emissionFactorDenominatorUnit,
+                    emissionFactorIntensity,
+                    exchangeRate,
+                    requestedCurrency,
                 } = result.unwrap()
 
                 permutationsResults.push({
@@ -234,6 +269,11 @@ async function main(): Promise<void> {
                     searchTermUsed: searchTerm,
                     categoryUsed: category || '',
                     score,
+                    emissionFactorNumeratorUnit,
+                    emissionFactorDenominatorUnit,
+                    emissionFactorIntensity,
+                    exchangeRate,
+                    requestedCurrency,
                 })
             }
             promises.push(fn())
@@ -257,12 +297,29 @@ async function main(): Promise<void> {
         const resultObj: Record<string, string> = sortedPermutationResults.reduce(
             (acc, result, i) => {
                 const idx = i + 1
-                const { name, emissions, source, url, searchTermUsed, categoryUsed, score } = result
+                const {
+                    name,
+                    emissions,
+                    source,
+                    url,
+                    searchTermUsed,
+                    categoryUsed,
+                    score,
+                    emissionFactorIntensity,
+                    emissionFactorNumeratorUnit,
+                    emissionFactorDenominatorUnit,
+                    exchangeRate,
+                    requestedCurrency,
+                } = result
                 return {
                     ...acc,
                     [`Emissions (tCO2e) (${idx})`]: emissions,
                     [`Emission factor name (${idx})`]: name,
                     [`Emission factor source (${idx})`]: source,
+                    [`Emission factor intensity (${idx})`]: emissionFactorIntensity,
+                    [`Emission factor intensity unit (${idx})`]: `${emissionFactorNumeratorUnit}CO2e/${requestedCurrency}`,
+                    [`Emission factor original unit (${idx})`]: `${emissionFactorNumeratorUnit}CO2e/${emissionFactorDenominatorUnit}`,
+                    [`Exchange rate (${idx})`]: exchangeRate,
                     [`Confidence score (${idx})`]: score ? `${score}` : ``,
                     [`Dashboard URL (${idx})`]: url,
                     [`Search term used (${idx})`]: searchTermUsed,
