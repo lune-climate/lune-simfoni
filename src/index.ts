@@ -1,12 +1,14 @@
 import { writeFile } from 'fs/promises'
 
-import { LuneClient, MonetaryAmount } from '@lune-climate/lune'
+import { LuneClient, MonetaryAmount, TransactionEmissionEstimate } from '@lune-climate/lune'
 import Big from 'big.js'
 import { program } from 'commander'
 import { stringify } from 'csv-stringify/sync'
 import { Err, Ok, Result } from 'ts-results-es'
 
 import { isRunningAsScript, loadCsv as loadCsvUtils } from 'src/utils.js'
+
+const MAX_RETRIES = 5
 
 program
     .name('lune-simfoni-csv-tool')
@@ -35,6 +37,10 @@ program
 
 function dashboardUrl(estimateId: string): string {
     return `https://dashboard.lune.co/calculate-emissions/everyday-purchases/${estimateId}/results`
+}
+
+async function sleepMs(ms: number): Promise<void> {
+    return new Promise((resolve, _reject) => setTimeout(resolve, ms))
 }
 
 async function calculateEmissions(
@@ -80,12 +86,31 @@ async function calculateEmissions(
             ...(category ? { category } : {}),
         },
     }
-    const result = await luneClient.createTransactionEstimate(request)
-    if (result.isErr()) {
-        return Err(result.error.description)
+
+    let result: Awaited<ReturnType<LuneClient['createTransactionEstimate']>> | undefined
+    for (let retryCount = 0; retryCount < MAX_RETRIES; retryCount++) {
+        result = await luneClient.createTransactionEstimate(request)
+
+        if (result.isErr()) {
+            console.error(`Error: `, result.error)
+            if ('statusCode' in result.error) {
+                return Err(result.error.description)
+            }
+
+            if (retryCount < MAX_RETRIES - 1) {
+                console.error(`Retrying in 0.5 seconds...`)
+                await sleepMs(500)
+                continue
+            } else {
+                console.error('Max retries reached')
+                return Err(result.error.description)
+            }
+        }
     }
 
-    if (!('mass' in result.value)) {
+    const res: TransactionEmissionEstimate = result!.unwrap()
+
+    if (!('mass' in res)) {
         return Ok({
             emissionsTCo2: '',
             emissionFactorName: '',
@@ -100,21 +125,21 @@ async function calculateEmissions(
         })
     }
 
-    const exchangeRate = Big(result.value.exchangeRate ?? 1)
-    const emissionFactor = result.value.emissionFactor!
+    const exchangeRate = Big(res.exchangeRate ?? 1)
+    const emissionFactor = res.emissionFactor!
     const emissionFactorIntensity = Big(emissionFactor.gasEmissions!.co2E).mul(exchangeRate)
 
     return Ok({
-        emissionsTCo2: result.value.mass.amount,
-        emissionFactorName: result.value.emissionFactor!.name,
-        emissionFactorSource: result.value.emissionFactor!.source,
+        emissionsTCo2: res.mass.amount,
+        emissionFactorName: res.emissionFactor!.name,
+        emissionFactorSource: res.emissionFactor!.source,
         emissionFactorIntensity: emissionFactorIntensity.toString(),
         emissionFactorNumeratorUnit: emissionFactor.numeratorUnit,
         emissionFactorDenominatorUnit: emissionFactor.denominatorUnit,
         requestedCurrency: currency,
         exchangeRate: exchangeRate.toString(),
-        score: result.value.searchTermMatchScore,
-        dashboardUrl: dashboardUrl(result.value.id),
+        score: res.searchTermMatchScore,
+        dashboardUrl: dashboardUrl(res.id),
     })
 }
 
@@ -221,7 +246,6 @@ async function main(): Promise<void> {
             // eslint-disable-next-line no-inner-declarations, func-style
             const fn = async () => {
                 const { searchTerm, category } = searchPermutations[i]
-
                 const result = await calculateEmissions(luneClient, {
                     searchTerm,
                     category,
@@ -230,7 +254,6 @@ async function main(): Promise<void> {
                     countryCode,
                 })
                 if (result.isErr()) {
-                    console.error(`Error: ${result.error}`)
                     permutationsResults.push({
                         name: `Error: ${result.error}`,
                         emissions: '',
