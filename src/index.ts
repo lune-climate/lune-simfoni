@@ -33,6 +33,10 @@ program
         '-c, --country-code-column <country-code-column>',
         `The name of the column containing mapping to the API's 'country_code'`,
     )
+    .option(
+        '-l, --limit-output-file-rows <limit-output-file-rows>',
+        'Limit the number of rows in the output file. Ouput file will be split if the limit is reached (defaults to 10000)',
+    )
     .argument('<csv-file>', 'The source CSV file')
 
 function dashboardUrl(estimateId: string): string {
@@ -180,6 +184,7 @@ async function main(): Promise<void> {
         monetaryAmountColumn,
         currencyColumn,
         countryCodeColumn,
+        limitOutputFileRows,
     } = program.opts()
     if (!searchTermColumns || !monetaryAmountColumn || !currencyColumn || !countryCodeColumn) {
         console.error(
@@ -187,6 +192,10 @@ async function main(): Promise<void> {
         )
         process.exit(1)
     }
+
+    const limitOutputFileRowsNum = limitOutputFileRows ? parseInt(limitOutputFileRows, 10) : 10000
+    const outputFileRows = isNaN(limitOutputFileRowsNum) ? 10000 : limitOutputFileRowsNum
+    console.log(`Limiting output file rows to ${outputFileRows}`)
 
     console.log(
         `Warning: this tools assumes: 'monetaryAmountColumn' contains valid floating point numbers, 'currencyColumn' contains valid ISO4217 currency codes and 'countryCodeColumn' valid alpha-3 ISO3166 country codes`,
@@ -214,8 +223,12 @@ async function main(): Promise<void> {
         process.exit(1)
     }
 
-    const out: any[] = []
-    for (const row of source.value) {
+    const totalRows = source.value.length
+
+    let out: any[] = []
+    for (let i = 0; i < totalRows; i += 1) {
+        const row = source.value[i]
+
         const searchTerms = searchTermColumnsArr.map((column: string) => row[column].trim())
         const categories = categoryColumnsArr.length
             ? categoryColumnsArr.map((column: string) => row[column].trim())
@@ -356,14 +369,20 @@ async function main(): Promise<void> {
             ...row,
             ...resultObj,
         })
-    }
 
-    const csvText = stringify(out, { header: true, quoted: true })
+        console.log(`Progress: ${i + 1}/${totalRows}`)
 
-    if (output) {
-        await writeFile(output, csvText)
-    } else {
-        console.log(csvText)
+        // Write to output file at every i being a multiple of outputFileRows, except when i is 0
+        // or at the end of the loop
+        if (((i + 1) % outputFileRows === 0 && i !== 0) || i === totalRows - 1) {
+            const suffix =
+                i === totalRows - 1 ? Math.ceil(i / outputFileRows) : Math.floor(i / outputFileRows)
+            const outputFilename = `${output}-${suffix}.csv`
+            const csv = stringify(out, { header: true })
+            await writeFile(outputFilename, csv)
+            console.log(`Writing to ${outputFilename}`)
+            out = []
+        }
     }
 }
 
