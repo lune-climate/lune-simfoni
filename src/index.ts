@@ -6,7 +6,7 @@ import { program } from 'commander'
 import { stringify } from 'csv-stringify/sync'
 import { Err, Ok, Result } from 'ts-results-es'
 
-import { isRunningAsScript, loadCsv as loadCsvUtils } from 'src/utils.js'
+import { isRunningAsScript, loadCsv as loadCsvUtils, logSpan } from 'src/utils.js'
 
 const MAX_RETRIES = 5
 
@@ -93,7 +93,12 @@ async function calculateEmissions(
 
     let result: Awaited<ReturnType<LuneClient['createTransactionEstimate']>> | undefined
     for (let retryCount = 0; retryCount < MAX_RETRIES; retryCount++) {
-        result = await luneClient.createTransactionEstimate(request)
+        result = await logSpan(
+            {
+                description: 'createTransactionEstimate',
+            },
+            () => luneClient.createTransactionEstimate(request),
+        )
 
         if (result.isErr()) {
             console.error(`Error: `, result.error)
@@ -110,6 +115,7 @@ async function calculateEmissions(
                 return Err(result.error.description)
             }
         }
+        break
     }
 
     const res: TransactionEmissionEstimate = result!.unwrap()

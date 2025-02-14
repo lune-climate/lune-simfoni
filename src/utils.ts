@@ -1,4 +1,5 @@
 import { readFile } from 'fs/promises'
+import { hrtime } from 'process'
 import { fileURLToPath } from 'url'
 
 import { parse as parseCsv } from 'csv-parse/sync'
@@ -173,4 +174,61 @@ export function passStringRecord<const T extends readonly string[]>(
     }
     // SAFETY: This type assertion relies on conditions we verified above.
     return Ok(value as { [Key in T[number]]: string })
+}
+
+/**
+ * Log a span of execution of a callback. Used to monitor the duration of parts of our code,
+ * in particular code performing IO operations or potentially blocking for other reasons
+ * (like performing a lot of computations without yielding to the event loop).
+ *
+ * @param callback The callback we're monitoring.
+ * @returns The value returned by the callback.
+ */
+export function logSpan<T>(
+    {
+        description,
+    }: {
+        /**
+         * The operation description to be included in the logs.
+         */
+        description: string
+    },
+    callback: () => T,
+): T {
+    const start = hrtime.bigint()
+    // The logSpan() logs are already verbose and logging every operations twice (start + end)
+    // only added to the noise.
+    //
+    // Logging operation start times has value primarly in production (where we're likely
+    // to hit some race conditions or long queries) but we have debug logging disabled there
+    // anyway so...
+    //
+    // Until we change the production logging level (or are able to change it dynamically
+    // or something) we might as well disable this, at least temporarily.
+    //
+    // If someone needs it locally they can just uncomment this line.
+
+    function logEnd(): void {
+        const durationNanoseconds = hrtime.bigint() - start
+        const durationMilliseconds = Number(durationNanoseconds) / 1000000
+        if (process.env.LOG_SPANS === '1') {
+            console.log(`Span end: ${description}`, {
+                span_duration_ms: durationMilliseconds,
+            })
+        }
+    }
+
+    const result = callback()
+    // In case of a promise we can't log here, we need to attach a callback to the promise and
+    // it'll only be executed when the promise is resolved.
+    if (result instanceof Promise) {
+        // We're not changing the type returned here but TS doesn't understand that so we need
+        // to type-assert. We can't express that Promise<...> that finally() returns is the same
+        // type as result (also Promise<...> in this context).
+        return result.finally(logEnd) as T
+    }
+
+    // In case of a sync callback we can (and have to) log right here, right now.
+    logEnd()
+    return result
 }
